@@ -77,6 +77,9 @@ import {AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness} from "../../..
 import {registerProductRunRoutes} from "./routes/product-run.js";
 // //TR: COORD korumalı paket 4a (LANE-C-linux-sandbox-provider v2): ücretsiz Linux unshare sağlayıcısı yalnız linux'ta ExecutionGate'e verilir; öz-test geçmezse kapı SANDBOX_UNAVAILABLE kalır (ana makinede yürütme yok).
 import {LinuxUnshareSandboxProvider} from "../../../core/agents/linux-unshare-sandbox.js";
+import {Wsl2SandboxProvider,defaultWslRunner,wslExe} from "../../../core/sandbox/wsl2-provider.js";
+import {installSandbox} from "../../../core/sandbox/wsl2-install.js";
+import {registerMissionAuthorizationRoutes} from "./routes/mission-authorization.js";
 import {bindingForFunction} from "../../../core/agents/first-delivery-bindings.js";
 // //TR: LANE-C: gövdede roleId yoksa run bağlı geliştirici rolüyle (first-delivery bağı) başlar; böylece runner rol kapısı ve AGENT_TRACE ürün akışında da çalışır. Açık roleId her zaman önceliklidir; uygun olmayan rol runner kapısında BLOCKED olur.
 const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
@@ -281,23 +284,28 @@ registerAnalysisRoutes(app,{...laneDeps,analysisFlow:(stopped)=>{const c=getExec
 // //TR: COORD korumalı paket 4b (LANE-B-devrun-bridge B-RUN-1): ürün çalıştırma teslim kaydına bağlıdır (sandbox + tek port 127.0.0.1 köprüsü); getDevRuns aşağıda tanımlıdır ve istek anında tembel okunur. restart route'u yoktur.
 registerProductRunRoutes(app,{...laneDeps,devruns:()=>getDevRuns()});
 registerRoleStatusRoutes(app,{...laneDeps,repoRoot});
+// //TR: DSK-T0008 P-B (Founder onayı bekliyor): görev başı kapsamlı yetki rotaları (GET durum, POST ver, POST geri al); runner koşu almadan önce bu kaydı uygular.
+registerMissionAuthorizationRoutes(app,laneDeps);
 
 // //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.
 const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test(x);
 let executorsCache:{pair:ExecutorPair|null;reason:string}|null=null;
 // //TR: PS-1A: açık env seçimi önceliklidir; yoksa veri dizinindeki kalıcı LOCAL_CLAUDE ayarı (yalnız geçerli provenance ile) kullanılır.
 function selectExecutors():{pair:ExecutorPair|null;reason:string}{
-  const env=executorsFromEnv(repoRoot,process.env,controlRoot,{profile:{forbiddenRoots:[getStore().dataDir]}});if(env.pair||env.reason!=="EXECUTOR_NOT_CONFIGURED")return env;
+  const env=executorsFromEnv(repoRoot,process.env,controlRoot,{profile:{forbiddenRoots:[getStore().dataDir]},isolationGate:executionGate});if(env.pair||env.reason!=="EXECUTOR_NOT_CONFIGURED")return env;
   const setup=getExecSetup();if(!setup.settingEnabled())return env;
   if(!setup.provenance().ok)return {pair:null,reason:"PROVENANCE_MISSING"};
   // INT-R3 D-M1-03: config/script'ler uygulama kökünden (repoRoot), provenance kontrol kökünden (paketli: userData) okunur.
-  try{return {pair:new LocalClaudeExecutors(repoRoot,controlRoot,{profile:{forbiddenRoots:[getStore().dataDir]}}).pair(),reason:"LOCAL_CLAUDE"}}catch{return {pair:null,reason:"EXECUTOR_CONFIG_INVALID"}}
+  // DSK-T0007: the same gate the runner uses; real-model processes start only through its verified provider (never on the host).
+  try{return {pair:new LocalClaudeExecutors(repoRoot,controlRoot,{profile:{forbiddenRoots:[getStore().dataDir]},isolationGate:executionGate}).pair(),reason:"LOCAL_CLAUDE"}}catch{return {pair:null,reason:"EXECUTOR_CONFIG_INVALID"}}
 }
 const getExecutors=()=>executorsCache??=opts.executors?{pair:opts.executors,reason:opts.executors.kind}:selectExecutors();
 let workRunner:MissionRunner|null=null;
 // //TR: SBX-GATE (FD-REL-1-REJECT-HOST-EXEC-2026-10-15): runner testleri ve Studio dev-run için tek karar noktası; sağlayıcı opts.sandbox (test) ile gelir.
 // //TR: COORD korumalı paket 4a (LANE-C-linux-sandbox-provider v2): opts.sandbox yoksa yalnız linux'ta LinuxUnshareSandboxProvider varsayılan seçenekleriyle kurulur (env/config/gövde sağlayıcı seçemez). Kurucu hata atarsa null döner (NO_VERIFIED_PROVIDER, sunucu açılışı çökmez); acceptUnenforcedProcessLimit bilerek VERİLMEZ, root gözetmende öz-test geçmez ve kapı SANDBOX_UNAVAILABLE kalır (fail-closed).
-const defaultSandboxProvider=():SandboxProvider|null=>{if(process.platform!=="linux")return null;try{return new LinuxUnshareSandboxProvider()}catch{return null}};
+// //TR: DSK-T0007 (Founder onayı bekliyor): win32'de ayrılmış UASCO-Sandbox WSL2 dağıtımı; konuk araç zinciri özetleri kurulumun yazdığı kontrol-kökü kaydından okunur (yoksa/bozuksa özet yok = öz-test GUEST_PIN_MISMATCH, fail-closed). Linux'ta mevcut sağlayıcı; diğer platformlarda yok.
+const wslPins=():{node:string;claude:string}|undefined=>{try{const j=JSON.parse(fs.readFileSync(path.join(controlRoot,".ai","runtime","WSL_SANDBOX.json"),"utf8"));return typeof j?.node==="string"&&/^[0-9a-f]{64}$/.test(j.node)&&typeof j?.claude==="string"&&/^[0-9a-f]{64}$/.test(j.claude)?{node:j.node,claude:j.claude}:undefined}catch{return undefined}};
+const defaultSandboxProvider=():SandboxProvider|null=>{try{if(process.platform==="linux")return new LinuxUnshareSandboxProvider();if(process.platform==="win32")return new Wsl2SandboxProvider({pins:wslPins,hostAppRoot:repoRoot,hostControlRoot:controlRoot});return null}catch{return null}};
 const executionGate=new ExecutionGate("sandbox" in opts?(opts.sandbox??null):defaultSandboxProvider());
 function getRunner(){
   if(workRunner)return workRunner;
@@ -493,6 +501,21 @@ app.get<{Params:{id:string;exportId:string}}>("/v1/projects/:id/exports/:exportI
 const claudeProfiles=()=>{try{return ensureClaudeProfiles(controlRoot,{forbiddenRoots:[getStore().dataDir]})}catch{return {error:"CLAUDE_PROFILE_STATUS_UNAVAILABLE"}}};
 app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason},sandbox:await executionGate.status(),claudeProfiles:claudeProfiles(),runner:runnerState()})));
 // //TR: DSK-T0008 P-A: PASSIVE runner'ı başlatır (yalnız MANUAL kip). Aynı yazma kapısı (GLOBAL_STOP, politika, boş gövde); hazırlık tam değilse 409 ve engel kodları. Zaten çalışıyorsa idempotent.
+// //TR: DSK-T0007 (Founder onayı 2026-11-24): ayrılmış UASCO-Sandbox WSL2 dağıtımının kurulumu/yeniden doğrulanması (yalnız win32; tek uçuş). Kullanıcının dağıtımlarına dokunulmaz; dosyalar sabit özetlerle doğrulanır; başarıda sandbox kapısı öz-testi YENİDEN koşulur. Bu uç gerçek yürütmeyi açmaz: öz-test ve görev yetkisi yine gerekir.
+let sandboxInstall:{state:"IDLE"|"RUNNING"|"DONE"|"FAILED";step:string|null}={state:"IDLE",step:null};
+app.get("/v1/system/sandbox/install",wos(async()=>({supported:process.platform==="win32",...sandboxInstall})));
+app.post("/v1/system/sandbox/install",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"workos.system.sandbox.install","NONE",body,validateEmptyBody))return reply;
+  if(process.platform!=="win32")return reply.code(409).send({error:"SANDBOX_INSTALL_REFUSED",reason:"PLATFORM_NOT_WIN32"});
+  if(sandboxInstall.state==="RUNNING")return {...sandboxInstall};
+  sandboxInstall={state:"RUNNING",step:null};audit("WORKOS_SANDBOX_INSTALL_STARTED",{actor});
+  const local=process.env.LOCALAPPDATA??path.join(controlRoot,"..");
+  void installSandbox({appRoot:repoRoot,controlRoot,installDir:path.join(local,"UASCO","wsl","UASCO-Sandbox"),workDir:path.join(local,"UASCO","wsl","downloads")},
+    {runner:defaultWslRunner(wslExe()),download:async(url,dest)=>{const r=await fetch(url);if(!r.ok||!r.body)throw new Error("DOWNLOAD_FAILED");fs.writeFileSync(dest,Buffer.from(await r.arrayBuffer()))}})
+    .then(r=>{sandboxInstall=r.ok?{state:"DONE",step:null}:{state:"FAILED",step:r.step};audit(r.ok?"WORKOS_SANDBOX_INSTALLED":"WORKOS_SANDBOX_INSTALL_FAILED",{actor,step:r.ok?null:r.step});executionGate.reverify();void executionGate.status()},
+      ()=>{sandboxInstall={state:"FAILED",step:"INSTALL_ERROR"};audit("WORKOS_SANDBOX_INSTALL_FAILED",{actor,step:"INSTALL_ERROR"})});
+  return {...sandboxInstall};
+}));
 app.post("/v1/system/runner/start",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.system.runner.start","NONE",body,validateEmptyBody))return reply;
   if(!runnerEnabled||!runnerManual)return reply.code(409).send({error:"RUNNER_START_REFUSED",reason:"RUNNER_NOT_MANUAL",runner:runnerState()});

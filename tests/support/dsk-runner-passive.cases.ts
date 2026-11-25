@@ -470,6 +470,40 @@ export function registerDskRunnerPassiveCases(): void {
     expect(ok.calls).toEqual([["/usr/bin/node", "/opt/uasco/claude-builder-broker.mjs"]]);
   });
 
+  it("WIRING (Founder-tier, server.ts + main.mjs): the authorization routes are live on the real server and exactly allow-listed in the desktop bridge", async () => {
+    const s = await mk({ready: true}); s.queueRun({auth: false}); const mid = s.mission(), H = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", "content-type": "application/json"};
+    const url = `/v1/missions/${mid}/authorization`;
+    expect((await s.app.inject({method: "GET", url, headers: H})).json()).toEqual({authorization: null, state: "NONE"});
+    const g = await s.app.inject({method: "POST", url, headers: H, payload: JSON.stringify({maxRisk: "R1", maxRuns: 2, expiresAt: new Date(Date.now() + 86_400_000).toISOString()})});
+    expect(g.statusCode).toBe(200); expect(g.json().state).toBe("LIVE");
+    expect((await s.app.inject({method: "POST", url: `${url}/revoke`, headers: H, payload: "{}"})).json().state).toBe("REVOKED");
+    const main = fs.readFileSync(path.resolve(import.meta.dirname, "..", "..", "apps", "desktop", "main.mjs"), "utf8");
+    const blk = (tag: string) => main.slice(main.indexOf(`// ${tag}-BEGIN`), main.indexOf(`// ${tag}-END`));
+    const post = new Function(`${blk("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (p: string) => boolean;
+    const id = "msn_" + "a".repeat(24);
+    expect(post(`/v1/missions/${id}/authorization`)).toBe(true); expect(post(`/v1/missions/${id}/authorization/revoke`)).toBe(true);
+    for (const bad of [`/v1/missions/${id}/authorization/`, `/v1/missions/${id}/authorization?x=1`, `/v1/missions/${id}/authorization/widen`, "/v1/missions/msn_x/authorization"]) expect(post(bad), bad).toBe(false);
+    expect(main).toContain("const MISSION_AUTH_RE=/^\\/v1\\/missions\\/msn_[0-9a-f]{24}\\/authorization$/;");
+  });
+
+  it("WIRING: sandbox install route is win32-only (409 elsewhere, nothing runs), behind the write gate, and exactly allow-listed", async () => {
+    const s = await mk({ready: true}), H = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", "content-type": "application/json"};
+    const g = (await s.app.inject({method: "GET", url: "/v1/system/sandbox/install", headers: H})).json();
+    expect(g).toEqual({supported: process.platform === "win32", state: "IDLE", step: null});
+    if (process.platform !== "win32") {
+      const r = await s.app.inject({method: "POST", url: "/v1/system/sandbox/install", headers: H, payload: "{}"});
+      expect(r.statusCode).toBe(409); expect(r.json().reason).toBe("PLATFORM_NOT_WIN32");
+      expect((await s.app.inject({method: "GET", url: "/v1/system/sandbox/install", headers: H})).json().state).toBe("IDLE");
+    }
+    expect((await s.app.inject({method: "POST", url: "/v1/system/sandbox/install", headers: H, payload: JSON.stringify({distro: "Ubuntu"})})).statusCode).toBe(400); // no distro/path can be chosen
+    s.stop(); expect((await s.app.inject({method: "POST", url: "/v1/system/sandbox/install", headers: H, payload: "{}"})).statusCode).toBe(423);
+    const main = fs.readFileSync(path.resolve(import.meta.dirname, "..", "..", "apps", "desktop", "main.mjs"), "utf8");
+    const blk = (tag: string) => main.slice(main.indexOf(`// ${tag}-BEGIN`), main.indexOf(`// ${tag}-END`));
+    const post = new Function(`${blk("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (p: string) => boolean;
+    expect(post("/v1/system/sandbox/install")).toBe(true);
+    for (const bad of ["/v1/system/sandbox/install/", "/v1/system/sandbox/uninstall", "/v1/system/sandbox/install?d=Ubuntu"]) expect(post(bad), bad).toBe(false);
+  });
+
   it("#446 N10: a reviewer that plants core.fsmonitor in the review clone never gets it executed by the runner; the run is BLOCKED REVIEWER_MUTATED_CLONE", { timeout: 120_000 }, async () => {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-n10-")), repo = path.join(tmp, "repo"), data = path.join(tmp, "data"), marker = path.join(tmp, "FSMONITOR_RAN");
     fs.mkdirSync(repo); const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };

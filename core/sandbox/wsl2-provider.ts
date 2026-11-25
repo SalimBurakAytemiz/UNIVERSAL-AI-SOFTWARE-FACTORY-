@@ -23,7 +23,7 @@ export type WslRunner = (args: string[], o: {input?: Buffer | string; timeoutMs:
 export interface Wsl2Options {
   platform?: NodeJS.Platform; runner?: WslRunner; systemRoot?: string;
   /** sha256 pins of the guest toolchain written at provisioning (node binary, claude CLI entry). */
-  pins?: {node: string; claude: string};
+  pins?: {node: string; claude: string} | (() => {node: string; claude: string} | undefined);
   /** Host path roots the mapper translates (the app install dir and the UASCO control root). */
   hostAppRoot?: string; hostControlRoot?: string;
   /** Host-side archive helpers (default: the system tar; on Windows the absolute System32\\tar.exe). */
@@ -116,6 +116,8 @@ export class Wsl2SandboxProvider implements SandboxProvider {
   private exec(cmd: string[], o: {input?: Buffer | string; timeoutMs?: number; shouldAbort?: () => boolean} = {}) {
     return this.runner(["-d", WSL_DISTRO, "-u", "root", "--exec", ...cmd], {timeoutMs: o.timeoutMs ?? 60_000, input: o.input, shouldAbort: o.shouldAbort});
   }
+  /** After an install/repair the next self-test runs again from scratch (never reuses a pass or a failure). */
+  resetVerification(): void { this.verified = false; this.probing = null; this.lastRefusal = null; }
   selfTest(): Promise<{ok: boolean; detail?: string}> {
     return this.probing ??= this.probe().then(r => { this.verified = r.ok; this.lastRefusal = r.ok ? null : (r.detail as WslRefusal); return r; }, () => { this.verified = false; this.lastRefusal = "SELFTEST_ERROR"; return {ok: false, detail: "SELFTEST_ERROR"}; });
   }
@@ -133,7 +135,8 @@ export class Wsl2SandboxProvider implements SandboxProvider {
     if (/AUTOMOUNT/.test(ot)) return {ok: false, detail: "AUTOMOUNT_ACTIVE"};
     if (/INTEROP/.test(ot)) return {ok: false, detail: "INTEROP_ACTIVE"};
     if (/MISSING/.test(ot) || outer.exitCode !== 0) return {ok: false, detail: "GUEST_TOOLS_MISSING"};
-    if (!this.o.pins || !ot.includes(this.o.pins.node) || !ot.includes(this.o.pins.claude)) return {ok: false, detail: "GUEST_PIN_MISMATCH"};
+    const pins = typeof this.o.pins === "function" ? this.o.pins() : this.o.pins; // read at probe time (an install writes the record later)
+    if (!pins || !ot.includes(pins.node) || !ot.includes(pins.claude)) return {ok: false, detail: "GUEST_PIN_MISMATCH"};
     const pr = await this.isolated("selftest", ["/bin/sh", "-c", PROBE_SCRIPT], {env: {}, timeoutMs: 60_000});
     const ev = evaluateProbe(pr.stdout.toString("utf8"));
     return ev.ok ? {ok: true} : {ok: false, detail: ev.reason};

@@ -5,10 +5,8 @@ Run on a real Windows 10 22H2+ / 11 machine with WSL 2 enabled (`wsl --status` s
 Record every result as PASS / FAIL with a screenshot or the printed line. Any FAIL keeps real execution disabled.
 No API key is used anywhere; sign-in is the Founder's own Claude subscription.
 
-## Not yet available (must land before this run)
-- Desktop "Install sandbox" button and its server route (calls `installSandbox`) — protected wiring, pending.
-- The mission authorization form's submit (PR-1 shows a disabled preview) wired to `POST /v1/missions/<id>/authorization` — renderer change on top of the wiring PR, pending.
-Until both exist, steps 1.1 and 4.2 cannot be performed from the UI.
+## Prerequisite
+This PR (protected wiring) adds the Settings "Install sandbox" button (POST /v1/system/sandbox/install) and enables the mission authorization submit (POST /v1/missions/<id>/authorization). Use a build that contains it.
 
 ## 0. Preconditions
 1. `wsl -l -v` — note your existing distros. They must be unchanged at the end (step 7).

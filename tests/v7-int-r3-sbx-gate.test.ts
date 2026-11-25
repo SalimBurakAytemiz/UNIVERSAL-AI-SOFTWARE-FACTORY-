@@ -96,7 +96,8 @@ describe("SBX-GATE ExecutionGate: single decision point", () => {
     // tek kayıt yolu: buildServer opts.sandbox (programatik); packaged/CLI girişleri sağlayıcı vermez, env okunmaz
     expect(server).toContain("new ExecutionGate(\"sandbox\" in opts?(opts.sandbox??null):defaultSandboxProvider());");
     // Batch 4a: the default provider is Linux-only, and a constructor throw degrades to "no provider" (never a startup crash).
-    expect(server).toContain("const defaultSandboxProvider=():SandboxProvider|null=>{if(process.platform!==\"linux\")return null;try{return new LinuxUnshareSandboxProvider()}catch{return null}};");
+    // DSK-T0007 (Founder-tier): the pinned selection now adds the dedicated WSL2 provider on win32; still no provider elsewhere, no env/config/body selection
+    expect(server).toContain("const defaultSandboxProvider=():SandboxProvider|null=>{try{if(process.platform===\"linux\")return new LinuxUnshareSandboxProvider();if(process.platform===\"win32\")return new Wsl2SandboxProvider({pins:wslPins,hostAppRoot:repoRoot,hostControlRoot:controlRoot});return null}catch{return null}};");
     expect(code(server)).not.toMatch(/acceptUnenforcedProcessLimit/);
     expect(server).not.toMatch(/process\.env\.[A-Z_]*SANDBOX/);
     // packaged entry never passes a sandbox option (comments may mention it); no env var is read for one
