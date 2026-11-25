@@ -936,6 +936,48 @@ export function registerCloudAcceptanceSuite(): void {
       } finally { await host.stop(); }
     });
 
+    // //TR: #358 inceleme N-2 (CLOUD-T0016): host düzeyinde proje yalıtımı. Aynı host'ta aynı komut iki projede (proj-web = A, proj-other = B) zincirlenir; B adına yapılan bir host.deliver çağrısı A'nın kabul edilmiş artifact'ını hiçbir biçimde (A'nın jobId'si, rel soneki çakışması, tam kapsamlı ad) teslim etmez ve B'nin sonuç listesi A'nın hiçbir adını içermez. Pozitif kontrol: her proje kendi paketini doğrulanmış olarak teslim alır.
+    it("N-2 host-level cross-project isolation: deliver/resultArtifacts for project B never return or deliver project A's accepted artifact, even with colliding rel/jobId shapes (positive control: each project gets its own)", async () => {
+      const keys = keysOf(envKeys()), host = mkHost(keys), signer = supervisorTestSigner(keys, now);
+      try {
+        const runChain = async (projectId: string): Promise<string> => {
+          const scope = signer.scope({tenantId: "tenant-a", projectId, environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"], allowNetwork: false, maxCostUsd: 10});
+          let pkg = "";
+          for (let round = 0; round < 6; round++) {
+            const d = await host.dispatch(COMMAND, signer.confirmation({objectiveSha256: digest(COMMAND), tenantId: "tenant-a", projectId, environment: "staging"}), scope);
+            expect(d.ok, JSON.stringify(d)).toBe(true);
+            if (d.ok) pkg = [...d.dag.tasks.values()].find(t => t.kind === "PACKAGE")!.taskId;
+            if (!d.ok || Object.values(d.report.statuses).every(v => v === "SUCCEEDED" || v === "BLOCKED_FOUNDER_GATE")) break;
+            for (let i = 0; i < 5; i++) { if ((await host.runWorkerOnce()).state !== "DONE") break; }
+          }
+          return pkg;
+        };
+        const pkgA = await runChain("proj-web"), pkgB = await runChain("proj-other");
+        const refsA = host.resultArtifacts(pkgA), refsB = host.resultArtifacts(pkgB);
+        expect(refsA.map(a => a.name)).toEqual([scopedArtifactName(pkgA, 1, "dist/app.zip")]);
+        expect(refsB.map(a => a.name)).toEqual([scopedArtifactName(pkgB, 1, "dist/app.zip")]);
+        expect(pkgA).not.toBe(pkgB);   // the task id binds the project, so the same command yields distinct job ids
+        // positive control: each project receives its OWN accepted package, verified end to end
+        expect(await host.deliver("tenant-a", "proj-web", pkgA, "dist/app.zip")).toMatchObject({issued: true, redeemed: true, verified: true, sha256: refsA[0].sha256});
+        expect(await host.deliver("tenant-a", "proj-other", pkgB, "dist/app.zip")).toMatchObject({issued: true, redeemed: true, verified: true, sha256: refsB[0].sha256});
+        // project B never receives A's artifact: A's job id, rel suffix collisions and A's full scoped name; and the reverse direction
+        const fullA = refsA[0].name, colliding = ["dist/app.zip", "app.zip", `a1/dist/app.zip`, `${pkgA}/a1/dist/app.zip`, fullA, fullA.replace(/^jobs\//, "")];
+        for (const rel of colliding) {
+          const r = await host.deliver("tenant-a", "proj-other", pkgA, rel);
+          expect(r, `B asked for A's job ${rel}`).toMatchObject({issued: false, redeemed: false, verified: false, sha256: null});
+          if (rel === "dist/app.zip") expect(r.reason).toBe("TENANT_MISMATCH");
+        }
+        // both packages carry identical bytes (same stub), so isolation is checked by name: B's own job never resolves a rel that names A's job or A's full scoped name
+        for (const rel of [`${pkgA}/a1/dist/app.zip`, fullA, fullA.replace(/^jobs\//, "")]) expect(await host.deliver("tenant-a", "proj-other", pkgB, rel), `B's job with A's name ${rel}`).toMatchObject({issued: false, verified: false, sha256: null});
+        expect(await host.deliver("tenant-a", "proj-web", pkgB, "dist/app.zip")).toMatchObject({issued: false, verified: false, reason: "TENANT_MISMATCH"});
+        // B's accepted-result list never names A's artifact, and every ref a job lists lives under that job's own scoped prefix
+        expect(refsB.some(a => refsA.some(x => x.name === a.name))).toBe(false);
+        for (const [id, refs] of [[pkgA, refsA], [pkgB, refsB]] as const) expect(refs.every(a => a.name.startsWith(`jobs/${id}/a`))).toBe(true);
+        // the store itself is project-scoped: A's scoped name does not exist in project B
+        expect((await host.store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-other", name: fullA})).ok).toBe(false);
+      } finally { await host.stop(); }
+    });
+
     it("#344 B-1: the host delivers only from an accepted (SUCCEEDED) job result: a job cancelled mid-run has no result artifacts and delivery for it is refused (mid-put orphans: worker-level T2/T7)", async () => {
       const keys = keysOf(envKeys());
       let cancelTarget = "", hostRef: ReturnType<typeof createCloudChainHost> | null = null;
