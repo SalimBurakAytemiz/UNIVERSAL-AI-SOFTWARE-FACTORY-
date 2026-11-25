@@ -425,6 +425,26 @@ describe("PS-1A files and git (PS-007)", () => {
     fs.writeFileSync(path.join(dataDir, "exports", `${clean.json().export.exportId}.zip`), "tampered");
     expect((await call(app, "GET", `/v1/projects/${p.projectId}/exports/${clean.json().export.exportId}`)).json().fileState).toBe("MODIFIED");
   }, T);
+
+  // //TR: V3-T1012.a (#324 NB-1): teslimde kilit dosyası zorunludur: package.json'u olan ama kilidi olmayan proje dışa aktarılamaz (409, hiçbir dosya/kayıt yazılmaz); kilit geri gelince aynı proje dışa aktarılır.
+  it("refuses an export of a Node project without a lockfile (409 EXPORT_LOCKFILE_MISSING, nothing written, no record); restoring the lock exports again", async () => {
+    const {app, dataDir} = mk();
+    const p = await createProject(app, {template: "node-lib"});
+    const repo = p.repository!.path, lock = fs.readFileSync(path.join(repo, "package-lock.json"), "utf8");
+    fs.rmSync(path.join(repo, "package-lock.json"));
+    commitAs(repo, "drop lock");
+    const exportsDir = path.join(dataDir, "exports"), before = fs.existsSync(exportsDir) ? fs.readdirSync(exportsDir) : [];
+    const r = await call(app, "POST", `/v1/projects/${p.projectId}/export`, {});
+    expect(r.statusCode, r.body).toBe(409);
+    expect(r.json()).toEqual({error: "EXPORT_LOCKFILE_MISSING"});
+    expect(fs.existsSync(exportsDir) ? fs.readdirSync(exportsDir) : [], "no zip and no temp dir").toEqual(before);
+    expect((await call(app, "GET", `/v1/projects/${p.projectId}/exports`)).json().exports).toEqual([]);
+    fs.writeFileSync(path.join(repo, "package-lock.json"), lock);
+    commitAs(repo, "restore lock");
+    const ok = await call(app, "POST", `/v1/projects/${p.projectId}/export`, {});
+    expect(ok.statusCode, ok.body).toBe(201);
+    expect(ok.json().export.lockfile).toBe("PRESENT");
+  }, T);
 });
 
 describe("PS-1A executor setup", () => {

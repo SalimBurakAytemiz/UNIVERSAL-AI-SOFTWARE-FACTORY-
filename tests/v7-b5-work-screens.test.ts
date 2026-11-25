@@ -254,6 +254,10 @@ describe("B5 form request builders", () => {
     // LOW (review #226): #222 PROJECT_REPOSITORY_INIT_FAILED (HTTP 500) has its own text, in en and tr
     expect(d(500, "PROJECT_REPOSITORY_INIT_FAILED")).toMatchObject({ok: false, key: "post.err.500.PROJECT_REPOSITORY_INIT_FAILED"});
     expect(en["post.err.500.PROJECT_REPOSITORY_INIT_FAILED"]).toMatch(/repository/i); expect(tr["post.err.500.PROJECT_REPOSITORY_INIT_FAILED"]).toMatch(/depo/i);
+    // V3-T1012.a: the export lockfile gate (409 EXPORT_LOCKFILE_MISSING) has its own text telling the Founder to commit a package-lock.json, in en and tr
+    expect(d(409, "EXPORT_LOCKFILE_MISSING")).toMatchObject({ok: false, key: "post.err.409.EXPORT_LOCKFILE_MISSING"});
+    for (const dict of [en, tr]) { expect(dict["post.err.409.EXPORT_LOCKFILE_MISSING"]).toContain("EXPORT_LOCKFILE_MISSING"); expect(dict["post.err.409.EXPORT_LOCKFILE_MISSING"]).toContain("package-lock.json"); }
+    expect(en["post.err.409.EXPORT_LOCKFILE_MISSING"]).toMatch(/commit/i); expect(tr["post.err.409.EXPORT_LOCKFILE_MISSING"]).toMatch(/commit edin/);
     expect(c.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline");
     expect(c.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     expect(c.describePostResult(null).ok).toBe(false);
