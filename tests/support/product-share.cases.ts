@@ -93,7 +93,8 @@ export function registerProductShareCases() {
       expect(() => m.parseNumstat("garbage")).toThrow(/NUMSTAT_UNPARSEABLE/);
     });
 
-    it("collects merged PRs from a real local git history with no network, skipping non-PR merges, and the CLI prints one JSON line", async () => {
+    // //TR: UASCO-T0118: bu senaryo gerçek git (init/commit/merge) ve iki CLI alt süreci çalıştırır; GitHub Windows runner'da vitest'in 5 sn varsayılanını aşabildi (#446, run 45426246495, validate-windows-shard 1: 6943 ms). Yalnız bu teste süre bütçesi verilir; dosya geneli setConfig yok, hiçbir iddia değişmez.
+    it("collects merged PRs from a real local git history with no network, skipping non-PR merges, and the CLI prints one JSON line", {timeout: 60_000}, async () => {
       const m = await load();
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-t0121-"));
       const env = {...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid", GIT_CONFIG_NOSYSTEM: "1", HOME: dir};
