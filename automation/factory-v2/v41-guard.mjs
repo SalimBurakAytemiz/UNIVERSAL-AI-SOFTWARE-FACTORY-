@@ -36,6 +36,25 @@ export function mergeAuthority({readAuthority, readHistory = () => [], anchored 
   } catch (e) { return {allowed: false, reason: `V2_INTENT_INVALID:${e?.message ?? e}`}; }
 }
 
+/**
+ * V4.1 new-work dispatch fence (next-task selection before any builder/reviewer spawn or claim). Same verified read as mergeAuthority, fail-closed:
+ * allowed only with no authority record at all (genesis) or a verified, anchored, hwm-checked record in phase V41_AUTHORITATIVE.
+ * Mid-handover -> HANDOVER_IN_PROGRESS:<phase>; V2 authoritative -> V41_FENCED_BY_V2_AUTHORITY; any read, protection or verification error -> AUTHORITY_UNVERIFIABLE:<why>.
+ */
+export function dispatchAuthority({readAuthority, readHistory = () => [], anchored = () => false, hwm = null, registryProtected = () => false, keyring, domain = DOMAIN}) {
+  let doc, history, anchor, hw;
+  try { doc = readAuthority(); history = readHistory(); anchor = anchored(); hw = hwm?.get() ?? null; if (!Array.isArray(history)) throw new Error("HISTORY_MALFORMED"); } catch (e) { return {allowed: false, reason: `AUTHORITY_UNVERIFIABLE:READ:${e?.message ?? e}`}; }
+  if (!doc && !history.some(Boolean) && !anchor && !((hw?.epoch ?? 0) > 0)) return {allowed: true, by: "V4.1", reason: "NO_AUTHORITY_RECORD"};
+  let prot; try { prot = registryProtected(); } catch { prot = false; }
+  if (!prot) return {allowed: false, reason: "AUTHORITY_UNVERIFIABLE:REGISTRY_NOT_PROTECTED"};
+  let core;
+  try { core = verifyAuthorityHistory({current: doc, history, ring: keyring(), domain, anchored: anchor, hwm: hw}).core; } catch (e) { return {allowed: false, reason: `AUTHORITY_UNVERIFIABLE:${e?.message ?? e}`}; }
+  if (hwm && core.epoch > (hw?.epoch ?? 0)) { try { hwm.set({epoch: core.epoch}); } catch {} }
+  if (core.phase === "V41_AUTHORITATIVE") return {allowed: true, by: "V4.1", epoch: core.epoch};
+  if (core.phase === "V2_AUTHORITATIVE") return {allowed: false, reason: "V41_FENCED_BY_V2_AUTHORITY"};
+  return {allowed: false, reason: `HANDOVER_IN_PROGRESS:${core.phase}`};
+}
+
 /** Live readers for the canonical merge path (read-only git against origin). */
 /** api: synchronous GitHub reader (the executor passes its own curlApi) used only for the branch-protection check. */
 export function liveAuthorityReaders({repoRoot, remote = "origin", baseRef = "v7/integration", branch = REGISTRY_BRANCH, domain = DOMAIN, api = null}) {
