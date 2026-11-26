@@ -255,8 +255,9 @@ function deliveryExportCheck(body,runId,deliveriesRoot,fsMod,pathMod,cryptoMod){
   if(!DELIVERY_RUN_ID_RE.test(String(runId))||!rec||typeof rec!=="object"||rec.runId!==runId||!DELIVERY_HASH_RE.test(String(rec.exportArtifactHash))||rec.artifactPath!==`deliveries/${rec.runId}/${rec.exportArtifactHash}.zip`)return {ok:false,reason:"DELIVERY_RECORD_INVALID"};
   if(body.sha256!==rec.exportArtifactHash||body.fileState!=="VERIFIED")return {ok:false,reason:"DELIVERY_ARTIFACT_HASH_MISMATCH"};
   if(typeof deliveriesRoot!=="string"||!pathMod.isAbsolute(deliveriesRoot))return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
-  let real,expected;try{real=fsMod.realpathSync(String(body.path));expected=fsMod.realpathSync(pathMod.join(deliveriesRoot,rec.runId,`${rec.exportArtifactHash}.zip`))}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
-  if(real!==expected)return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
+  // UASCO-T0016.D / AUD-022: body.path apiPost→sanitizePostBody/scrubText ile "[path]" olur ve zaten sunucu girdisidir; dosya YALNIZ ana sürecin veri dizini + doğrulanmış kayıttan türetilir, gerçek yol kökün altında kalmalıdır (sembolik bağ kaçışı reddedilir).
+  let real,rootReal;try{rootReal=fsMod.realpathSync(deliveriesRoot);real=fsMod.realpathSync(pathMod.join(deliveriesRoot,rec.runId,`${rec.exportArtifactHash}.zip`))}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
+  if(!real.startsWith(rootReal+pathMod.sep))return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
   let bytes;try{bytes=fsMod.readFileSync(real)}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
   const sha=cryptoMod.createHash("sha256").update(bytes).digest("hex");
   if(sha!==rec.exportArtifactHash)return {ok:false,reason:"DELIVERY_ARTIFACT_HASH_MISMATCH"};

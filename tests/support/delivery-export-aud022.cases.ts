@@ -1,7 +1,7 @@
 // //TR: Bu vaka dosyası (kayıtlı tests/v7-ux-delivery.test.ts tarafından içe aktarılır; ayrı korumalı kayıt gerektirmez) UASCO-T0016.A / AUD-022 (RW-009) birleşik scrubber + dışa aktarma
 // testidir: GERÇEK buildServer gerçek bir teslim ZIP'i hazırlar ve dışa aktarır; main.mjs'nin GERÇEK scrubText/sanitizePostBody ve deliveryExportCheck fonksiyonları kaynaktan değerlendirilir.
-// Bugün sanitizePostBody mutlak yolu "[path]" yaptığı için dışa aktarma DELIVERY_ARTIFACT_MISSING ile başarısızdır (hata sabitlenir); main.mjs düzeltilince test kendiliğinden "dışa aktarma
-// başarılı + sha256 eşleşir" beklentisine sıkılaşır. Önerilen Founder-tier düzeltme (yalnız veri dizininden türetilen yol) aynı gerçek artefaktla burada doğrulanır.
+// sanitizePostBody mutlak yolu "[path]" yapar; UASCO-T0016.D (Founder-tier main.mjs) ile deliveryExportCheck artık body.path'e güvenmez, dosyayı yalnız veri dizini + doğrulanmış kayıttan türetir.
+// Bu yüzden test KATIDIR: gerçek köprü gövdesiyle dışa aktarma başarılı olmalı, sha256 eşleşmeli; ayrıca GERÇEK uasco:export-delivery IPC işleyici kaynağı uçtan uca sürülür.
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -90,20 +90,50 @@ export function registerDeliveryExportAud022Cases(): void {
       expect(scrub("/Users/founder/Library/Application Support/UASCO/x.zip")).toBe("[path] Support/UASCO/x.zip");
     });
 
-    it("the real main.mjs export path: today it fails with DELIVERY_ARTIFACT_MISSING only because of the scrubbed path (the unscrubbed body passes); once main.mjs is fixed this tightens to a real export", async () => {
+    it("the real main.mjs export path (T0016.D fixed): the scrubbed bridge body exports the real ZIP and the sha256 matches", async () => {
       const c = setup(tmp), e = await realExport(c);
       const viaBridge = mainCheck(sanitize(200, e.raw), e.runId, e.root, fs, path, crypto);
-      const unscrubbed = mainCheck(e.raw, e.runId, e.root, fs, path, crypto);
-      expect(unscrubbed.ok).toBe(true); // tek neden temizlenmiş yoldur
-      const bytes = fs.readFileSync(e.file);
-      if (viaBridge.ok) {
-        // main.mjs düzeltildi: masaüstü dışa aktarma gerçek ZIP'i verir ve sha256 eşleşir
-        expect(viaBridge.sha256).toBe(e.raw.sha256);
-        expect(Buffer.compare(viaBridge.bytes!, bytes)).toBe(0);
-      } else {
-        // AUD-022 bugün: her masaüstü dışa aktarma başarısız
-        expect(viaBridge).toEqual({ok: false, reason: "DELIVERY_ARTIFACT_MISSING"});
-      }
+      expect(viaBridge.ok, JSON.stringify({reason: viaBridge.reason})).toBe(true);
+      expect(viaBridge.sha256).toBe(e.raw.sha256);
+      expect(Buffer.compare(viaBridge.bytes!, fs.readFileSync(e.file))).toBe(0);
+      expect(viaBridge.fileName).toBe(`UASCO-teslim-${e.runId}-${e.raw.sha256.slice(0, 12)}.zip`);
+      // body.path (sunucu girdisi) artık hiçbir yeri işaret edemez: başka bir dosyaya yönlendirmek dışa aktarılan baytları değiştirmez
+      const decoy = path.join(tmp, "decoy.zip"); fs.writeFileSync(decoy, Buffer.from("not the delivery"));
+      const redirected = mainCheck({...sanitize(200, e.raw), path: decoy}, e.runId, e.root, fs, path, crypto);
+      expect(redirected.ok).toBe(true);
+      expect(Buffer.compare(redirected.bytes!, fs.readFileSync(e.file))).toBe(0);
+    });
+
+    it("main.mjs deliveryExportCheck IS the reviewed AUD-022 proposal (comments ignored)", () => {
+      const strip = (src: string) => src.split("\n").filter(l => !l.trim().startsWith("//")).join("\n").trim();
+      const m = /function deliveryExportCheck\([\s\S]*?\n\}\n/.exec(block("M1A-C2"));
+      expect(m).not.toBeNull();
+      expect(strip(m![0])).toBe(strip(PROPOSED_DELIVERY_EXPORT_CHECK));
+    });
+
+    it("end to end through the REAL uasco:export-delivery IPC handler source: real server export -> sanitizePostBody -> deliveryExportCheck -> save dialog -> written copy re-hashed", async () => {
+      const c = setup(tmp), e = await realExport(c);
+      const app = apps[apps.length - 1] as any;
+      const hm = /ipcMain\.handle\("uasco:export-delivery",[\s\S]*?\n\}\);\n/.exec(MAIN_SRC);
+      expect(hm, "handler source").not.toBeNull();
+      const saveTo = path.join(tmp, "saved", "export.zip"); fs.mkdirSync(path.dirname(saveTo), {recursive: true});
+      const posts: string[] = []; let handler: ((ev: unknown, runId: unknown) => Promise<any>) | null = null;
+      // main.mjs apiPost aynası: gerçek sunucuya POST, yanıt GERÇEK sanitizePostBody'den geçer
+      const apiPost = async (p: string, bodyText: string) => { posts.push(p); const r = await app.inject({method: "POST", url: p, headers: {...HDR, "content-type": "application/json"}, payload: bodyText}); let parsed: unknown = null; try { parsed = JSON.parse(r.body); } catch { parsed = null; } return {status: r.statusCode, body: sanitize(r.statusCode, parsed)}; };
+      const deps = {ipcMain: {handle: (n: string, fn: any) => { if (n === "uasco:export-delivery") handler = fn; }}, requireTrustedSender: () => undefined, DELIVERY_RUN_ID_RE: /^run_[0-9a-f]{24}$/, apiPost, deliveryExportCheck: mainCheck,
+        path, fs, crypto, dataDirRoot: () => c.dataDir, controlWindow: null, dialog: {showSaveDialog: async (_w: unknown, o: any) => { expect(o.defaultPath).toBe(`UASCO-teslim-${e.runId}-${e.raw.sha256.slice(0, 12)}.zip`); return {canceled: false, filePath: saveTo}; }}};
+      new Function(...Object.keys(deps), hm![0])(...Object.values(deps));
+      expect(handler).not.toBeNull();
+      const out = await handler!({}, e.runId);
+      expect(out).toEqual({exported: true, sha256: e.raw.sha256, fileName: "export.zip", savedTo: saveTo});
+      expect(posts).toEqual([`/v1/work-runs/${e.runId}/delivery/export`]);
+      expect(crypto.createHash("sha256").update(fs.readFileSync(saveTo)).digest("hex")).toBe(e.raw.sha256);
+      // kurcalanmış artefakt: işleyici bayt vermez, sunucu ya da ana süreç reddeder (sessiz başarı yok)
+      fs.writeFileSync(e.file, Buffer.concat([fs.readFileSync(e.file), Buffer.from("x")])); fs.rmSync(saveTo);
+      const bad = await handler!({}, e.runId);
+      expect(bad.exported).toBe(false);
+      expect(fs.existsSync(saveTo)).toBe(false);
+      await expect(handler!({}, "run_bad")).rejects.toThrow("INVALID_RUN_ID");
     });
 
     it("proposed Founder-tier fix: the scrubbed bridge body exports the real ZIP (sha256 matches) and every existing guard still refuses", async () => {

@@ -421,8 +421,18 @@ describe("M1a c2 protected main-process wiring (pure blocks evaluated in isolati
       expect(Buffer.compare(ok.bytes, bytes)).toBe(0);
       expect(b.deliveryExportCheck(body, RUN2, rootDir, fs, path, crypto).reason).toBe("DELIVERY_RECORD_INVALID");
       expect(b.deliveryExportCheck({...body, sha256: H2}, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_HASH_MISMATCH");
-      const outside = path.join(tmp, "elsewhere.zip"); fs.writeFileSync(outside, bytes);
-      expect(b.deliveryExportCheck({...body, path: outside}, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_PATH_REJECTED");
+      // UASCO-T0016.D / AUD-022: body.path (sunucu girdisi, köprüde "[path]" olur) dosyayı seçemez; yalnız <data>/deliveries/<run>/<hash>.zip verilir.
+      const outside = path.join(tmp, "elsewhere.zip"); fs.writeFileSync(outside, Buffer.from("other-bytes"));
+      const redirected = b.deliveryExportCheck({...body, path: outside}, RUN, rootDir, fs, path, crypto);
+      expect(redirected.ok).toBe(true); expect(Buffer.compare(redirected.bytes, bytes)).toBe(0);
+      expect(b.deliveryExportCheck({...body, path: "[path]"}, RUN, rootDir, fs, path, crypto)).toMatchObject({ok: true, sha256: hash});
+      expect(b.deliveryExportCheck(body, RUN, "relative/deliveries", fs, path, crypto).reason).toBe("DELIVERY_PATH_REJECTED");
+      // kökün dışına çözülen sembolik bağlı koşu dizini reddedilir
+      const realRun = path.join(rootDir, RUN), escape = path.join(tmp, "escape-run"); fs.mkdirSync(escape); fs.copyFileSync(file, path.join(escape, `${hash}.zip`));
+      fs.renameSync(realRun, path.join(tmp, "run-backup"));
+      let linked = true; try { fs.symlinkSync(escape, realRun, "dir"); } catch { linked = false; }
+      if (linked) expect(b.deliveryExportCheck(body, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_PATH_REJECTED");
+      fs.rmSync(realRun, {recursive: true, force: true}); fs.renameSync(path.join(tmp, "run-backup"), realRun);
       fs.writeFileSync(file, Buffer.concat([bytes, Buffer.from("x")]));
       expect(b.deliveryExportCheck(body, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_HASH_MISMATCH");
       fs.rmSync(file);
